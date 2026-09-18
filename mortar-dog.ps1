@@ -12,10 +12,11 @@ param(
 )
 <# TODO:
 convert ingame string to x and y values e.g. - x95.96, y109.39
-Use JSON, create one from embedded template if none
 Params for Verbosity
 Usage func
 min/max distance error
+function to store mortar site in JSON for later
+function to "clean" json
 #>
 
 <#####################################
@@ -43,7 +44,7 @@ function Test-Success{
         exit
     }
 }
-function Load-JSON{
+function Get-MortarJSON{
     if (! (Test-Path $_JSON_PATH)){
         Write-Host "=== No JSON Data detected, creating template..." -NoNewline
         $template = @'
@@ -58,6 +59,20 @@ function Load-JSON{
     Write-Host "=== Loading JSON data...." -NoNewline
     $_DATA = Get-Content -Path $_JSON_PATH -Raw | ConvertFrom-Json
     Test-Success $? "Failed to Load JSON"
+    return $_DATA
+}
+
+function ConvertFrom-GameCoords{
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0, Mandatory = $true)]
+        [array]$GameCoords
+    )
+
+    [double]$xString = ($GameCoords.split(",")[0]).split("x")[1]
+    [double]$yString = ($GameCoords.split(",")[1]).split("y")[1]
+
+    return @($xString,$yString)
 }
 
 function Get-AbsoluteValue{
@@ -81,9 +96,9 @@ MAIN
 ######################################>
 #Write-Host "=== Start"
 
-Load-Json
+$_MortarObj = Get-MortarJSON
 
-echo $Mortar[0]
+[double[]]$MortarCoords = ConvertFrom-GameCoords $Mortar
 
 #Write-Host "=== SET RANGE TO: $("{0:F2}" -f ([System.Math]::Sqrt(($xPOW2 + $yPOW2))*100))"
 
