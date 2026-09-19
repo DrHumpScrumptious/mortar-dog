@@ -162,6 +162,6 @@ if($SetMortarSite){
 if($PSBoundParameters.ContainsKey('Target')){
     [double[]]$TargetCoords = ConvertFrom-GameCoords $Target
     Write-Host "Target Site: x$($TargetCoords[0]), y$($TargetCoords[1])"
-}
 
-Get-Range $MortarCoords[0] $MortarCoords[1] $TargetCoords[0] $TargetCoords[1]
+    Get-Range $MortarCoords[0] $MortarCoords[1] $TargetCoords[0] $TargetCoords[1]
+}
