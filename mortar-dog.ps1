@@ -1,17 +1,13 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
-    
-    [Parameter(Position = 0, Mandatory = $false)]
-    [string[]]$Mortar
-    <#
-    [Parameter(Position = 2, Mandatory = $true)]
-    [double]$Target_X,
-    [Parameter(Position = 3, Mandatory = $true)]
-    [double]$Target_Y
-    #>
+    [Parameter(Mandatory = $false)]
+    [string[]]$Mortar,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Target,
+    [switch]$SetMortarSite,
+    [switch]$ResetData
 )
 <# TODO:
-convert ingame string to x and y values e.g. - x95.96, y109.39
 Params for Verbosity
 Usage func
 min/max distance error
@@ -23,6 +19,8 @@ function to "clean" json
 VARS
 ######################################>
 $_JSON_PATH = Join-Path $PSScriptRoot "data.json"
+$_MIN_RANGE = 200
+$_MAX_RANGE = 700
 
 <#####################################
 FUNCTIONS
@@ -41,6 +39,7 @@ function Test-Success{
     }
     else{
         Write-Host "FAIL" -ForegroundColor Red
+        Write-Host "Error: $ErrMsg" -ForegroundColor Yellow
         exit
     }
 }
@@ -75,31 +74,94 @@ function ConvertFrom-GameCoords{
     return @($xString,$yString)
 }
 
-function Get-AbsoluteValue{
-    [double]$xABS = $("{0:F2}" -f $([System.Math]::Abs($Target_X-$Mortar_X)))
-    #Write-Host "=== X Abs: $xABS"
+function Update-MortarCoords{
+    [CmdletBinding()]
+    param(
+        [object]$DataFile,
+        [double]$X_Cord,
+        [double]$Y_Cord
+        )
 
-    [double]$yABS = $("{0:F2}" -f $([System.Math]::Abs($Target_Y-$Mortar_Y)))
-    #Write-Host "=== Y Abs: $yABS"
+    Write-Host "=== Updating MortarSite X Coordinates..." -NoNewline
+    $DataFile.MortarX = $X_Cord
+    Test-Success $? "Failed to Update X Coordinates"
+
+    Write-Host "=== Updating MortarSite Y Coordinates..." -NoNewline
+    $DataFile.MortarY = $Y_Cord
+    Test-Success $? "Failed to Update Y Coordinates"
+
+    Write-Host "=== Writing data to $($_JSON_PATH)..." -NoNewline
+    $DataFile | ConvertTo-JSON | Set-Content -Path $_JSON_PATH -Encoding UTF8
+    Test-Success $? "Failed to Update JSON Path at $($_JSON_PATH)"
 }
 
-function Get-Pow2Value{
+function Get-Range{
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0, Mandatory = $true)]
+        [double]$MortarX,
+        [Parameter(Position = 1, Mandatory = $true)]
+        [double]$MortarY,
+        [Parameter(Position = 2, Mandatory = $true)]
+        [double]$TargetX,
+        [Parameter(Position = 3, Mandatory = $true)]
+        [double]$TargetY
+    )
+    [double]$xABS = $("{0:F2}" -f $([System.Math]::Abs($MortarX-$TargetX)))
+    [double]$yABS = $("{0:F2}" -f $([System.Math]::Abs($MortarY-$TargetY)))
     [double]$xPOW2 = [System.Math]::Pow($xABS,2)
-    #Write-Host "=== X Abs ^2: $xPOW2"
-
     [double]$yPOW2 = [System.Math]::Pow($yABS,2)
-    #Write-Host "=== Y Abs ^2: $yPOW2"
+    
+    $range = $("{0:F2}" -f ([System.Math]::Sqrt(($xPOW2 + $yPOW2))*100))
+
+    if ($range -gt $_MAX_RANGE){
+        Write-Host "=== TARGET IS TOO FAR" -ForegroundColor Red
+        exit
+    }
+
+    if ($range -lt $_MIN_RANGE){
+        Write-Host "=== TARGET IS TOO CLOSE" -ForegroundColor Red
+        exit
+    }
+
+    return $range
 }
 
 <#####################################
 MAIN
 ######################################>
-#Write-Host "=== Start"
+
+if($ResetData){
+    if(! (Test-Path $_JSON_PATH)){
+        Write-Host "=== No JSON File to Remove...ignoring"
+    }
+    else{
+        Write-Host "=== Cleaning JSON Data file..." -NoNewline
+        Remove-Item $_JSON_PATH
+        Test-Success $? "Failed to delete JSON Data"
+    }
+}
 
 $_MortarObj = Get-MortarJSON
 
-[double[]]$MortarCoords = ConvertFrom-GameCoords $Mortar
+if($PSBoundParameters.ContainsKey('Mortar')){
+    [double[]]$MortarCoords = ConvertFrom-GameCoords $Mortar
+    Write-Host "Mortar Site: x$($MortarCoords[0]), y$($MortarCoords[1])"
+}
+else
+{
+    [double[]]$MortarCoords = @($_MortarObj.MortarX, $_MortarObj.MortarY)
+    Write-Host "Mortar Site: x$($MortarCoords[0]), y$($MortarCoords[1])"
+}
 
-#Write-Host "=== SET RANGE TO: $("{0:F2}" -f ([System.Math]::Sqrt(($xPOW2 + $yPOW2))*100))"
+if($SetMortarSite){
+    Update-MortarCoords $_MortarObj $MortarCoords[0] $MortarCoords[1]
+}
 
-#Write-Host "=== END"
+
+if($PSBoundParameters.ContainsKey('Target')){
+    [double[]]$TargetCoords = ConvertFrom-GameCoords $Target
+    Write-Host "Target Site: x$($TargetCoords[0]), y$($TargetCoords[1])"
+}
+
+Get-Range $MortarCoords[0] $MortarCoords[1] $TargetCoords[0] $TargetCoords[1]
